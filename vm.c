@@ -31,7 +31,7 @@ enum
   R_COUNT
 };
 
-enum x
+enum
 {
   OP_BR = 0, /* branch */
   OP_ADD, /* add */
@@ -88,8 +88,21 @@ int main(int argc, const char* argv[]){
     switch (op)
     {
       case OP_ADD:
-        {ADD, 6}
-        break;
+        /* destination register (DR) */
+        uint16_t r0 = (instr >> 9) & 0x7;
+        /* first operand (SR1) */
+        uint16_t r1 = (instr >> 6) & 0x7;
+        /* whether we are in immediate mode */
+        uint16_t imm_flag = (instr >> 5) & 0x1;
+
+        if(imm_flag){
+          uint16_t imm5 = sign_extend(instr & 0x1F, 5);
+          reg[r0] = reg[r1] + imm5;
+        } else {
+          reg[r0] = reg[r1] + reg[r2];
+        }
+        update_flags(r0);
+      break;
       case OP_AND:
         {AND, 7}
         break;
@@ -109,7 +122,14 @@ int main(int argc, const char* argv[]){
         {LD, 7}
         break;
       case OP_LDI:
-        {LDI, 7}
+        /* destination register (DR) */
+        uint16_t r0 = (instr >> 9) & 0x7;
+        /* PCoffset 9 */
+        uint16_t pc_offset = sign_extend(instr & 0x1ff, 9);
+        /* add pc_offset to the current PC, look at that memory location to get the final
+         * address */
+        reg[r0] = mem_read(mem_read(reg[R_PC] + pc_offset));
+        update_flags(r0);
         break;
       case OP_LDR:
         {LDR, 7}
@@ -138,3 +158,21 @@ int main(int argc, const char* argv[]){
   }
   {Shutdown, 12}
 }
+
+uint16_t sign_extend(uint16_t x, int bit_count)
+{
+  if((x >> (bit_count - 1)) & 1) {
+    x |= (0xFFFF << bit_count);
+  }
+  return x;
+}
+
+void update_flags(uint16_t r)
+{
+  if(reg[r] == 0){
+    reg[R_COND] = FL_ZRO;
+  } else if (reg[r] >> 15){ /* a 1 in the left-most bit indicates negative */
+    reg[R_COND] = FL_NEG;
+  } else {
+    reg[R_COND] = FL_POS;
+  } 
